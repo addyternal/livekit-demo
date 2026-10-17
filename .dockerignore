@@ -1,0 +1,9 @@
+node_modules
+recordings
+egress
+config
+deploy
+.env
+deploy.env
+*.log
+.git

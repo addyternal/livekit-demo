@@ -1,0 +1,12 @@
+# One domain serves both the app and LiveKit signalling, so browsers need a single wss:// URL.
+# Caddy gets and renews the HTTPS certificate automatically (ports 80 and 443 must reach this machine).
+{$DOMAIN} {
+	encode gzip
+
+	# LiveKit signalling (WebSocket + validate)
+	@livekit path /rtc /rtc/*
+	reverse_proxy @livekit localhost:{$LK_PORT:7880}
+
+	# Everything else is the app
+	reverse_proxy localhost:{$APP_PORT:8100}
+}

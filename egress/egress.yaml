@@ -1,0 +1,9 @@
+api_key: devkey
+api_secret: secret
+ws_url: ws://localhost:7880
+insecure: true
+redis:
+  address: localhost:6379
+  db: 5
+health_port: 9090
+log_level: info

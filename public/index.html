@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Huddle · LiveKit demo</title>
+  <script>try{var t=JSON.parse(localStorage.getItem('huddle:theme'));if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Join screen: preview + form -->
+  <main id="join" class="join">
+    <button class="icon-btn js-theme join-theme" aria-label="Toggle theme" title="Toggle theme"><i class="fa-solid fa-moon"></i></button>
+
+    <section class="card join-card">
+      <div class="preview">
+        <div class="pv-frame">
+          <video id="pvVideo" autoplay playsinline muted></video>
+          <div id="pvOff" class="pv-off" hidden><i class="fa-solid fa-video-slash"></i><span id="pvMsg">Camera is off</span></div>
+          <div class="pv-controls">
+            <button type="button" class="ctl" id="pvMic" aria-label="Toggle microphone" title="Microphone"><i class="fa-solid fa-microphone"></i></button>
+            <button type="button" class="ctl" id="pvCam" aria-label="Toggle camera" title="Camera"><i class="fa-solid fa-video"></i></button>
+          </div>
+        </div>
+        <div class="meter" aria-label="Microphone level"><i id="pvLevel"></i></div>
+        <div class="pv-selects">
+          <select id="pvCamSel" aria-label="Camera"></select>
+          <select id="pvMicSel" aria-label="Microphone"></select>
+        </div>
+      </div>
+
+      <div class="join-form">
+        <div class="brand"><i class="fa-solid fa-video" aria-hidden="true"></i> Huddle</div>
+        <h1>Ready to join?</h1>
+        <p class="lede">Check how you look and sound, then pick a room. Share the room name or invite link with others.</p>
+
+        <form id="joinForm" autocomplete="off">
+          <div class="field">
+            <label for="name">Your name</label>
+            <input id="name" name="name" required maxlength="32" placeholder="Ada Lovelace">
+          </div>
+          <div class="field">
+            <label for="room">Room</label>
+            <div class="with-btn">
+              <input id="room" name="room" required maxlength="64" placeholder="design-sync" class="mono">
+              <button type="button" id="diceBtn" class="icon-btn" aria-label="Generate a room name" title="Generate a room name"><i class="fa-solid fa-dice"></i></button>
+            </div>
+          </div>
+          <p id="roomHint" class="hint" hidden>Your last room, remembered for 2 hours. <button type="button" id="roomClear" class="link">Clear</button></p>
+          <button class="btn primary" type="submit" id="joinBtn">
+            <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i> Join room
+          </button>
+          <p id="error" class="error" role="alert" hidden></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- Shown briefly after a refresh while in a call -->
+  <div id="resume" class="resume" hidden>
+    <i class="fa-solid fa-spinner fa-spin"></i>
+    <span>Rejoining <b id="resumeRoom" class="mono"></b>…</span>
+    <button type="button" id="resumeCancel" class="top-btn">Cancel</button>
+  </div>
+
+  <!-- Room screen -->
+  <div id="roomView" class="room" hidden>
+    <header class="topbar">
+      <div class="room-title">
+        <i class="fa-solid fa-video" aria-hidden="true"></i>
+        <span id="roomName" class="mono"></span>
+      </div>
+      <div id="recPill" class="rec-pill" hidden><i class="fa-solid fa-circle"></i><span id="recText">REC</span></div>
+      <div class="top-actions">
+        <button id="inviteBtn" class="top-btn" title="Copy invite link"><i class="fa-solid fa-link"></i><span>Invite</span></button>
+        <button id="layoutBtn" class="icon-btn" aria-label="Switch layout" title="Switch layout (L)"><i class="fa-solid fa-table-cells-large"></i></button>
+        <button class="icon-btn js-theme" aria-label="Toggle theme" title="Toggle theme"><i class="fa-solid fa-moon"></i></button>
+        <button id="fsBtn" class="icon-btn" aria-label="Fullscreen" title="Fullscreen (F)"><i class="fa-solid fa-expand"></i></button>
+        <div class="count" title="Participants"><i class="fa-solid fa-user-group" aria-hidden="true"></i> <span id="count">1</span></div>
+      </div>
+    </header>
+
+    <div class="stage">
+      <section id="grid" class="grid" aria-label="Participants"></section>
+
+      <div id="waiting" class="waiting" hidden>
+        <span>Waiting for others to join</span>
+        <button id="waitInvite" class="top-btn"><i class="fa-solid fa-link"></i> Copy invite link</button>
+      </div>
+      <div id="banner" class="banner" hidden><i class="fa-solid fa-spinner fa-spin"></i> Reconnecting…</div>
+      <div id="toasts" class="toasts" aria-live="polite"></div>
+
+      <aside id="side" class="side" aria-label="Chat and people">
+        <div class="side-head">
+          <div class="tabs" role="tablist">
+            <button class="tab" id="tabChat" role="tab" aria-selected="true">Chat</button>
+            <button class="tab" id="tabPeople" role="tab" aria-selected="false">People <span id="peopleCount" class="pill">1</span></button>
+          </div>
+          <button class="icon-btn" id="closeSide" aria-label="Close panel"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div id="chatView" class="pane">
+          <ul id="messages" class="messages"></ul>
+          <form id="chatForm" class="chat-form" autocomplete="off">
+            <div id="emojiPanel" class="emoji-panel" hidden></div>
+            <button type="button" class="icon-btn" id="emojiBtn" aria-label="Insert emoji" title="Emoji"><i class="fa-regular fa-face-smile"></i></button>
+            <input id="chatInput" placeholder="Message" aria-label="Message">
+            <button class="icon-btn solid" aria-label="Send" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
+          </form>
+        </div>
+
+        <div id="peopleView" class="pane" hidden>
+          <ul id="people" class="people"></ul>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="controls" aria-label="Call controls">
+      <button class="ctl" id="micBtn" aria-label="Toggle microphone" title="Microphone (M)"><i class="fa-solid fa-microphone"></i></button>
+      <button class="ctl" id="camBtn" aria-label="Toggle camera" title="Camera (V)"><i class="fa-solid fa-video"></i></button>
+      <button class="ctl sec" id="shareBtn" aria-label="Share screen" title="Share screen"><i class="fa-solid fa-display"></i></button>
+      <button class="ctl sec" id="recBtn" aria-label="Record" title="Record this call"><i class="fa-solid fa-circle-dot"></i></button>
+      <button class="ctl" id="handBtn" aria-label="Raise hand" title="Raise hand (H)"><i class="fa-regular fa-hand"></i></button>
+      <button class="ctl" id="reactBtn" aria-label="Send reaction" title="React"><i class="fa-regular fa-face-smile"></i></button>
+      <button class="ctl" id="chatBtn" aria-label="Toggle chat" title="Chat (C)"><i class="fa-regular fa-comment"></i><b id="unread" class="badge" hidden></b></button>
+      <button class="ctl sec" id="peopleBtn" aria-label="People" title="People (P)"><i class="fa-solid fa-user-group"></i></button>
+      <button class="ctl sec" id="settingsBtn" aria-label="Settings" title="Settings"><i class="fa-solid fa-gear"></i></button>
+      <button class="ctl more" id="moreBtn" aria-label="More" title="More"><i class="fa-solid fa-ellipsis"></i></button>
+      <button class="ctl danger" id="leaveBtn" aria-label="Leave room" title="Leave"><i class="fa-solid fa-phone-slash"></i><span>Leave</span></button>
+
+      <div id="reactPop" class="popover" hidden></div>
+      <div id="morePop" class="popover more-pop" hidden></div>
+    </nav>
+  </div>
+
+  <div id="audioSink"></div>
+
+  <!-- Settings -->
+  <dialog id="settings">
+    <form method="dialog" class="dlg">
+      <header>
+        <h2>Settings</h2>
+        <button class="icon-btn" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      <div class="dlg-body">
+        <div class="field"><label for="setName">Display name</label><input id="setName" maxlength="32" autocomplete="off"></div>
+        <div class="field"><label for="setMic">Microphone</label><select id="setMic"></select></div>
+        <div class="field"><label for="setCam">Camera</label><select id="setCam"></select></div>
+        <div class="field" id="setSpkWrap"><label for="setSpk">Speaker</label><select id="setSpk"></select></div>
+
+        <label class="switch"><span>Noise suppression<small>Filters out background noise</small></span><input type="checkbox" id="optNs"></label>
+        <label class="switch"><span>Echo cancellation<small>Stops others hearing themselves</small></span><input type="checkbox" id="optEc"></label>
+        <label class="switch"><span>Auto gain<small>Keeps your volume steady</small></span><input type="checkbox" id="optAgc"></label>
+
+        <div class="field"><span>Recordings in this room</span><ul id="recList" class="rec-list"></ul></div>
+
+        <button type="button" class="top-btn" id="openShortcuts"><i class="fa-regular fa-keyboard"></i> Keyboard shortcuts</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Shortcuts -->
+  <dialog id="shortcuts">
+    <form method="dialog" class="dlg">
+      <header>
+        <h2>Keyboard shortcuts</h2>
+        <button class="icon-btn" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      <dl class="keys">
+        <dt><kbd>M</kbd></dt><dd>Mute / unmute</dd>
+        <dt><kbd>V</kbd></dt><dd>Camera on / off</dd>
+        <dt><kbd>H</kbd></dt><dd>Raise / lower hand</dd>
+        <dt><kbd>C</kbd></dt><dd>Chat</dd>
+        <dt><kbd>P</kbd></dt><dd>People</dd>
+        <dt><kbd>L</kbd></dt><dd>Grid / speaker layout</dd>
+        <dt><kbd>F</kbd></dt><dd>Fullscreen</dd>
+        <dt><kbd>?</kbd></dt><dd>This list</dd>
+      </dl>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.7/dist/livekit-client.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Used together with --dev (dev keys: devkey / secret).
+# Redis is required so the Egress service can talk to this server.
+redis:
+  address: 127.0.0.1:6379
+  db: 5
+rtc:
+  # Lets the Egress container (in WSL) reach media over loopback; LAN/browser candidates are unchanged.
+  enable_loopback_candidate: true

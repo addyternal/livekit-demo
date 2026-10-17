@@ -1,0 +1,89 @@
+# Whole stack for a Linux server: Redis + LiveKit + Egress (recording) + the app, and optional HTTPS.
+#
+#   cp deploy.env.example deploy.env      # then edit it
+#   docker compose --env-file deploy.env up -d --build                    # HTTP, localhost / LAN
+#   docker compose --env-file deploy.env --profile https up -d --build    # + automatic HTTPS (needs a domain)
+#
+# Everything uses host networking: it is what LiveKit recommends for WebRTC and it keeps media on the real server IP.
+name: huddle
+
+services:
+  redis:
+    image: redis:7-alpine
+    network_mode: host
+    restart: unless-stopped
+    # Only reachable from this machine; no persistence needed (it just relays messages)
+    command: ["redis-server", "--bind", "127.0.0.1", "--port", "${REDIS_PORT:-6379}", "--save", "", "--appendonly", "no"]
+
+  livekit:
+    image: livekit/livekit-server:${LIVEKIT_VERSION:-latest}
+    network_mode: host
+    restart: unless-stopped
+    depends_on: [redis]
+    environment:
+      NODE_IP: ${NODE_IP:-}
+      LIVEKIT_CONFIG: |
+        port: ${LK_PORT:-7880}
+        rtc:
+          tcp_port: ${LK_TCP_PORT:-7881}
+          udp_port: ${LK_UDP_PORT:-7882}
+          use_external_ip: ${USE_EXTERNAL_IP:-true}
+        redis:
+          address: localhost:${REDIS_PORT:-6379}
+          db: 5
+        keys:
+          ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in deploy.env}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in deploy.env}
+
+  egress:
+    image: livekit/egress:${EGRESS_VERSION:-latest}
+    network_mode: host
+    restart: unless-stopped
+    cap_add: [SYS_ADMIN]          # Chrome sandbox
+    depends_on: [livekit]
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: ${LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET}
+        ws_url: ws://localhost:${LK_PORT:-7880}
+        insecure: true
+        redis:
+          address: localhost:${REDIS_PORT:-6379}
+          db: 5
+        health_port: ${EGRESS_HEALTH_PORT:-9090}
+        template_port: ${EGRESS_TEMPLATE_PORT:-7980}
+        log_level: info
+    volumes:
+      - ./recordings:/out
+
+  app:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    depends_on: [livekit]
+    environment:
+      PORT: ${APP_PORT:-8100}
+      LIVEKIT_URL: ${PUBLIC_LIVEKIT_URL:-ws://localhost:7880}   # what browsers connect to
+      LIVEKIT_API_URL: http://localhost:${LK_PORT:-7880}        # how the app reaches LiveKit
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+    volumes:
+      - ./recordings:/app/recordings:ro
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: [https]
+    network_mode: host
+    restart: unless-stopped
+    depends_on: [app, livekit]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      LK_PORT: ${LK_PORT:-7880}
+      APP_PORT: ${APP_PORT:-8100}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
